@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>Jevマインスイーパー</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <main class="shell">
+        <header class="masthead">
+            <div>
+                <p class="product-mark" aria-hidden="true">E5 / JEV</p>
+                <h1>Jevマインスイーパー</h1>
+            </div>
+            <p class="intro">公開された盤面だけをJevに渡し、推定した地雷確率が最も低いマスを一手ずつ開きます。</p>
+        </header>
+
+        <div class="workspace">
+            <section class="board-section" aria-labelledby="board-heading">
+                <div class="board-toolbar">
+                    <div>
+                        <p class="section-label">盤面</p>
+                        <h2 id="board-heading">9 × 9 / 地雷10個</h2>
+                    </div>
+                    <dl class="counters" aria-label="ゲームの集計">
+                        <div>
+                            <dt>旗</dt>
+                            <dd id="flag-count">0 / 10</dd>
+                        </div>
+                        <div>
+                            <dt>公開</dt>
+                            <dd id="reveal-count">0 / 71</dd>
+                        </div>
+                    </dl>
+                </div>
+
+                <p id="game-status" class="game-status" role="status" aria-live="polite">盤面を選ぶか、Jevに一手を依頼してください。</p>
+                <div id="board" class="board" role="group" aria-label="マインスイーパー盤面"></div>
+
+                <div class="board-legend" aria-label="盤面の見方">
+                    <span><i class="legend-swatch unopened"></i>未開封</span>
+                    <span><i class="legend-swatch candidate"></i>直近の候補</span>
+                    <span><i class="legend-swatch flag"></i>旗</span>
+                </div>
+            </section>
+
+            <aside class="instrument-panel" aria-label="Jev操作と履歴">
+                <section class="controls" aria-labelledby="controls-heading">
+                    <p class="section-label">操作</p>
+                    <h2 id="controls-heading">次の一手</h2>
+                    <div class="button-grid">
+                        <button id="step-button" class="button primary" type="button">1手進める</button>
+                        <button id="auto-button" class="button secondary" type="button">自動で解く</button>
+                        <button id="stop-button" class="button secondary" type="button" disabled>停止</button>
+                        <button id="restart-button" class="button quiet" type="button">再開始</button>
+                    </div>
+                    <button id="flag-mode-button" class="flag-mode" type="button" aria-pressed="false">
+                        タッチ旗モード: オフ
+                    </button>
+                    <p id="config-message" class="config-message">Jevの設定を確認しています。</p>
+                </section>
+
+                <section class="candidate-readout" aria-labelledby="candidate-heading">
+                    <div>
+                        <p class="section-label">現在の候補</p>
+                        <h2 id="candidate-heading">地雷確率の推定</h2>
+                    </div>
+                    <div id="candidate-empty" class="candidate-empty">Jevが候補を選ぶと、座標と推定値を表示します。</div>
+                    <dl id="candidate-details" class="candidate-details" hidden>
+                        <div>
+                            <dt>座標</dt>
+                            <dd id="candidate-coordinate">—</dd>
+                        </div>
+                        <div>
+                            <dt>推定地雷確率</dt>
+                            <dd id="candidate-probability">—</dd>
+                        </div>
+                    </dl>
+                    <p class="estimate-note">推定値であり、安全を保証する値ではありません。</p>
+                </section>
+
+                <section class="history-section" aria-labelledby="history-heading">
+                    <div class="history-heading-row">
+                        <div>
+                            <p class="section-label">履歴</p>
+                            <h2 id="history-heading">最近の操作</h2>
+                        </div>
+                        <span id="activity-indicator" class="activity-indicator" hidden>推論中</span>
+                    </div>
+                    <ol id="history" class="history" aria-live="polite"></ol>
+                </section>
+            </aside>
+        </div>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+</body>
+</html>
