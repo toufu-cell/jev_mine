@@ -10,9 +10,5 @@
     },
     "engines": {
         "node": ">=24"
-    },
-    "dependencies": {
-        "@ai-sdk/gateway": "4.0.86",
-        "ai": "7.0.106"
     }
 }

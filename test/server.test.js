@@ -70,14 +70,14 @@ function requestWithHost({
 function successfulJevResponse(options) {
     const requestBody = JSON.parse(options.body);
     const answers = Object.fromEntries(
-        Object.keys(requestBody.questions).map((key) => [key, { type: "boolean", probability: 0.1 }]),
+        Object.keys(requestBody.questions).map((key) => [key, { type: "noul", noul: 0.1 }]),
     );
     return new Response(JSON.stringify({ answers }), { status: 200 });
 }
 
-function gatewayErrorResponse(status, type, message) {
+function upstreamErrorResponse(status, message) {
     return new Response(JSON.stringify({
-        error: { type, message },
+        error: { message },
     }), { status });
 }
 
@@ -95,6 +95,22 @@ function postInference(fixture, { signal } = {}) {
 }
 
 test("キー未設定でも画面を配信し、Jev操作だけを無効と通知する", async (context) => {
+    const originalGatewayKey = process.env.AI_GATEWAY_API_KEY;
+    const originalTypeSafeKey = process.env.TYPESAFE_API_KEY;
+    process.env.AI_GATEWAY_API_KEY = "old-key-only";
+    delete process.env.TYPESAFE_API_KEY;
+    context.after(() => {
+        if (originalGatewayKey === undefined) {
+            delete process.env.AI_GATEWAY_API_KEY;
+        } else {
+            process.env.AI_GATEWAY_API_KEY = originalGatewayKey;
+        }
+        if (originalTypeSafeKey === undefined) {
+            delete process.env.TYPESAFE_API_KEY;
+        } else {
+            process.env.TYPESAFE_API_KEY = originalTypeSafeKey;
+        }
+    });
     const fixture = await startServer();
     context.after(() => closeServer(fixture.server));
 
@@ -119,11 +135,11 @@ test("キー未設定でも画面を配信し、Jev操作だけを無効と通�
     assert.match(pageResponse.body, /Jevマインスイーパー/);
     assert.deepEqual(await configResponse.json(), { jevAvailable: false });
     assert.equal(turnPolicyResponse.status, 200);
-    assert.match(await appResponse.text(), /\.envにAI_GATEWAY_API_KEY/);
+    assert.match(await appResponse.text(), /\.envにTYPESAFE_API_KEY/);
     assert.equal(inferenceResponse.status, 503);
     assert.deepEqual(await inferenceResponse.json(), {
         error: "jev_not_configured",
-        message: "AI_GATEWAY_API_KEYを設定するとJev操作を利用できます。",
+        message: "TYPESAFE_API_KEYを設定するとJev操作を利用できます。",
     });
 });
 
@@ -216,40 +232,48 @@ test("不正な盤面と大きすぎるbodyをJevへ送らない", async (contex
     assert.equal(upstreamCalls, 0);
 });
 
-test("Gatewayエラーを固定文へ変換し、APIキーや生のエラーを返さない", async (context) => {
+test("TypeSafeエラーを固定文へ変換し、APIキーや生のエラーを返さない", async (context) => {
     const secret = "server-secret-do-not-leak";
     const rawMessage = `raw upstream error: ${secret}`;
     const cases = [
         {
-            response: () => gatewayErrorResponse(401, "authentication_error", rawMessage),
+            response: () => upstreamErrorResponse(401, rawMessage),
             status: 502,
             body: {
                 error: "jev_unauthorized",
-                message: "Vercel AI Gatewayの認証に失敗しました。AI_GATEWAY_API_KEYを確認してください。",
+                message: "TypeSafeの認証に失敗しました。TYPESAFE_API_KEYを確認してください。",
             },
         },
         {
-            response: () => gatewayErrorResponse(403, "forbidden", rawMessage),
+            response: () => upstreamErrorResponse(403, rawMessage),
             status: 502,
             body: {
                 error: "jev_unauthorized",
-                message: "Vercel AI Gatewayの認証に失敗しました。AI_GATEWAY_API_KEYを確認してください。",
+                message: "TypeSafeの認証に失敗しました。TYPESAFE_API_KEYを確認してください。",
             },
         },
         {
-            response: () => gatewayErrorResponse(402, "invalid_request_error", rawMessage),
+            response: () => upstreamErrorResponse(402, rawMessage),
             status: 402,
             body: {
                 error: "jev_payment_required",
-                message: "Vercel AI Gatewayの残高が不足しています。",
+                message: "TypeSafeの支払いを確認してください。",
             },
         },
         {
-            response: () => gatewayErrorResponse(429, "rate_limit_exceeded", rawMessage),
+            response: () => upstreamErrorResponse(429, rawMessage),
             status: 503,
             body: {
                 error: "jev_rate_limited",
-                message: "Vercel AI Gatewayの利用上限に達しました。時間を置いて再試行してください。",
+                message: "TypeSafeの利用上限に達しました。時間を置いて再試行してください。",
+            },
+        },
+        {
+            response: () => upstreamErrorResponse(529, rawMessage),
+            status: 502,
+            body: {
+                error: "jev_upstream_error",
+                message: "TypeSafeがリクエストを処理できませんでした。",
             },
         },
         {
@@ -291,7 +315,7 @@ test("Gatewayエラーを固定文へ変換し、APIキーや生のエラーを�
 
     assert.equal(`${publicBodies.join("")}${configBody}${clientBody}`.includes(secret), false);
     assert.equal(`${publicBodies.join("")}${configBody}${clientBody}`.includes(rawMessage), false);
-    assert.match(clientBody, /AI_GATEWAY_API_KEY/);
+    assert.match(clientBody, /TYPESAFE_API_KEY/);
     assert.equal(upstreamCalls, cases.length);
 });
 

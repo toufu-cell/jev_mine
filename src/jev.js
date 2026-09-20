@@ -1,7 +1,5 @@
-import { createGateway } from "@ai-sdk/gateway";
-import { experimental_evaluate } from "ai";
-
-const JEV_MODEL = "typesafe-ai/jev";
+const JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
+const JEV_MODEL = "jev-latest";
 const MAX_UPSTREAM_BODY_BYTES = 256 * 1024;
 const NETWORK_ERROR_CODES = new Set([
     "ECONNREFUSED",
@@ -39,7 +37,7 @@ export function buildEvaluationRequest(board) {
         const key = `cell_${candidate.row}_${candidate.column}`;
         const label = coordinateLabel(candidate.row, candidate.column);
         questions[key] = {
-            type: "boolean",
+            type: "noul",
             instructions: `Does the unopened Minesweeper cell at coordinate ${label} contain a mine?`,
         };
     }
@@ -94,10 +92,10 @@ export function parseEvaluationResponse(payload, candidates) {
         if (
             !answer
             || typeof answer !== "object"
-            || answer.type !== "boolean"
-            || !Number.isFinite(answer.probability)
-            || answer.probability < 0
-            || answer.probability > 1
+            || answer.type !== "noul"
+            || !Number.isFinite(answer.noul)
+            || answer.noul < 0
+            || answer.noul > 1
         ) {
             throw new JevRequestError("malformed_response");
         }
@@ -105,7 +103,7 @@ export function parseEvaluationResponse(payload, candidates) {
         return {
             ...candidate,
             coordinate: coordinateLabel(candidate.row, candidate.column),
-            probability: answer.probability,
+            probability: answer.noul,
         };
     });
 
@@ -179,63 +177,34 @@ async function bufferLimitedResponse(response, signal) {
     });
 }
 
-function createLimitedFetch(fetchImpl) {
-    return async (url, options = {}) => {
-        const response = await fetchImpl(url, options);
-        return bufferLimitedResponse(response, options.signal);
-    };
-}
-
-function errorChain(error) {
-    const chain = [];
-    const seen = new Set();
-    let current = error;
-
-    while (current && typeof current === "object" && !seen.has(current)) {
-        chain.push(current);
-        seen.add(current);
-        current = current.cause;
-    }
-
-    return chain;
-}
-
 function mapEvaluationError(error, { signal, timedOut }) {
-    const chain = errorChain(error);
-    const knownError = chain.find((current) => current instanceof JevRequestError);
-    if (knownError) {
-        return knownError;
-    }
     if (timedOut) {
         return new JevRequestError("timeout");
     }
     if (signal?.aborted) {
         return new JevRequestError("client_cancelled");
     }
+    if (error instanceof JevRequestError) {
+        return error;
+    }
 
-    const statusCode = chain.find((current) => Number.isInteger(current.statusCode))?.statusCode;
-    if (statusCode === 401 || statusCode === 403) {
+    const isNetworkError = error instanceof TypeError
+        || (typeof error?.code === "string" && NETWORK_ERROR_CODES.has(error.code))
+        || (typeof error?.cause?.code === "string" && NETWORK_ERROR_CODES.has(error.cause.code));
+    return new JevRequestError(isNetworkError ? "network_error" : "upstream_error");
+}
+
+function errorForStatus(status) {
+    if (status === 401 || status === 403) {
         return new JevRequestError("unauthorized");
     }
-    if (statusCode === 402) {
+    if (status === 402) {
         return new JevRequestError("payment_required");
     }
-    if (statusCode === 429) {
+    if (status === 429) {
         return new JevRequestError("rate_limited");
     }
-    if (
-        statusCode === 200
-        || chain.some((current) => current.name === "AI_InvalidResponseDataError")
-    ) {
-        return new JevRequestError("malformed_response");
-    }
-
-    const isNetworkError = chain.some((current) => (
-        current instanceof TypeError
-        || (typeof current.code === "string" && NETWORK_ERROR_CODES.has(current.code))
-        || (current.name === "AI_APICallError" && current.statusCode === undefined)
-    ));
-    return new JevRequestError(isNetworkError ? "network_error" : "upstream_error");
+    return new JevRequestError("upstream_error");
 }
 
 export async function evaluateBoard(board, {
@@ -265,19 +234,29 @@ export async function evaluateBoard(board, {
     }
 
     try {
-        const gateway = createGateway({
-            apiKey,
-            fetch: createLimitedFetch(fetchImpl),
+        const response = await fetchImpl(JEV_ENDPOINT, {
+            method: "POST",
+            headers: {
+                authorization: `Bearer ${apiKey}`,
+                "content-type": "application/json",
+            },
+            body: JSON.stringify({ model: JEV_MODEL, state, questions }),
+            redirect: "error",
+            signal: abortController.signal,
         });
-        const result = await experimental_evaluate({
-            model: gateway.evaluationModel(JEV_MODEL),
-            state,
-            questions,
-            providerOptions: {},
-            maxRetries: 0,
-            abortSignal: abortController.signal,
-        });
-        return parseEvaluationResponse(result, candidates);
+        if (!response.ok) {
+            void response.body?.cancel().catch(() => {});
+            throw errorForStatus(response.status);
+        }
+
+        const boundedResponse = await bufferLimitedResponse(response, abortController.signal);
+        let payload;
+        try {
+            payload = await boundedResponse.json();
+        } catch {
+            throw new JevRequestError("malformed_response");
+        }
+        return parseEvaluationResponse(payload, candidates);
     } catch (error) {
         throw mapEvaluationError(error, { signal, timedOut });
     } finally {

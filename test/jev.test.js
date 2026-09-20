@@ -17,34 +17,40 @@ const board = {
     flags: [{ row: 8, column: 8 }],
 };
 
-function gatewayError(status, type) {
+function upstreamError(status) {
     return new Response(JSON.stringify({
         error: {
             message: "raw upstream error",
-            type,
         },
     }), { status });
 }
 
-test("SDK実物で公開情報とboolean質問をGatewayへ1回だけ送る", async () => {
-    const request = buildEvaluationRequest(board);
+test("公開情報とnoul質問をTypeSafeへ1回だけ送る", async () => {
+    const testBoard = {
+        ...board,
+        unopened: [...board.unopened, { row: 0, column: 2 }],
+    };
+    const request = buildEvaluationRequest(testBoard);
     const serializedState = JSON.stringify(request.state);
     let upstreamCalls = 0;
     let capturedBody;
     let capturedHeaders;
     let capturedUrl;
+    let capturedOptions;
 
-    const candidate = await evaluateBoard(board, {
+    const candidate = await evaluateBoard(testBoard, {
         apiKey: "test-secret",
         fetchImpl: async (url, options) => {
             upstreamCalls += 1;
             capturedUrl = url;
+            capturedOptions = options;
             capturedHeaders = new Headers(options.headers);
             capturedBody = JSON.parse(options.body);
             return new Response(JSON.stringify({
                 answers: {
-                    cell_0_0: { type: "boolean", probability: 0.2 },
-                    cell_0_1: { type: "boolean", probability: 0.2 },
+                    cell_0_0: { type: "noul", noul: 0.2 },
+                    cell_0_1: { type: "noul", noul: 0.2 },
+                    cell_0_2: { type: "noul", noul: 0.8 },
                 },
             }), { status: 200, headers: { "content-type": "application/json" } });
         },
@@ -53,17 +59,18 @@ test("SDK実物で公開情報とboolean質問をGatewayへ1回だけ送る", as
     assert.deepEqual(request.state.board.revealed, [{ coordinate: "E5", adjacentMines: 1 }]);
     assert.deepEqual(request.state.board.flags, ["I9"]);
     assert.match(request.questions.cell_0_0.instructions, /A1/);
-    assert.equal(request.questions.cell_0_0.type, "boolean");
+    assert.equal(request.questions.cell_0_0.type, "noul");
     assert.equal(serializedState.includes("mineLocations"), false);
     assert.equal(serializedState.includes("neighborMines"), false);
-    assert.equal(capturedUrl, "https://ai-gateway.vercel.sh/v4/ai/evaluation-model");
+    assert.equal(capturedUrl, "https://api.typesafe.ai/v1/systemone");
+    assert.equal(capturedOptions.method, "POST");
+    assert.equal(capturedOptions.redirect, "error");
     assert.equal(capturedHeaders.get("authorization"), "Bearer test-secret");
-    assert.equal(capturedHeaders.get("ai-model-id"), "typesafe-ai/jev");
-    assert.deepEqual(Object.keys(capturedBody).sort(), ["providerOptions", "questions", "state"]);
-    assert.equal(Object.hasOwn(capturedBody, "model"), false);
+    assert.equal(capturedHeaders.get("content-type"), "application/json");
+    assert.deepEqual(Object.keys(capturedBody).sort(), ["model", "questions", "state"]);
+    assert.equal(capturedBody.model, "jev-latest");
     assert.deepEqual(capturedBody.state, request.state);
     assert.deepEqual(capturedBody.questions, request.questions);
-    assert.deepEqual(capturedBody.providerOptions, {});
     assert.deepEqual(candidate, { row: 0, column: 0, coordinate: "A1", probability: 0.2 });
     assert.equal(upstreamCalls, 1);
 });
@@ -72,26 +79,38 @@ test("全候補の欠落、型違い、範囲外、余分な回答と256 KiB超�
     const invalidResponses = [
         () => new Response(JSON.stringify({
             answers: {
-                cell_0_0: { type: "boolean", probability: 0.1 },
+                cell_0_0: { type: "noul", noul: 0.1 },
             },
         }), { status: 200 }),
         () => new Response(JSON.stringify({
             answers: {
                 cell_0_0: { type: "choice", choice: "safe" },
-                cell_0_1: { type: "boolean", probability: 0.2 },
+                cell_0_1: { type: "noul", noul: 0.2 },
             },
         }), { status: 200 }),
         () => new Response(JSON.stringify({
             answers: {
-                cell_0_0: { type: "boolean", probability: -0.1 },
-                cell_0_1: { type: "boolean", probability: 0.2 },
+                cell_0_0: { type: "noul", noul: -0.1 },
+                cell_0_1: { type: "noul", noul: 0.2 },
             },
         }), { status: 200 }),
         () => new Response(JSON.stringify({
             answers: {
-                cell_0_0: { type: "boolean", probability: 0.1 },
-                cell_0_1: { type: "boolean", probability: 0.2 },
-                cell_8_8: { type: "boolean", probability: 0.3 },
+                cell_0_0: { type: "noul", noul: 1.1 },
+                cell_0_1: { type: "noul", noul: 0.2 },
+            },
+        }), { status: 200 }),
+        () => new Response(JSON.stringify({
+            answers: {
+                cell_0_0: { type: "noul", noul: "0.1" },
+                cell_0_1: { type: "noul", noul: 0.2 },
+            },
+        }), { status: 200 }),
+        () => new Response(JSON.stringify({
+            answers: {
+                cell_0_0: { type: "noul", noul: 0.1 },
+                cell_0_1: { type: "noul", noul: 0.2 },
+                cell_8_8: { type: "noul", noul: 0.3 },
             },
         }), { status: 200 }),
         () => new Response("x".repeat(256 * 1024 + 1), { status: 200 }),
@@ -113,12 +132,14 @@ test("全候補の欠落、型違い、範囲外、余分な回答と256 KiB超�
     }
 });
 
-test("認証、残高、利用上限を区別し、429でも再試行しない", async () => {
+test("HTTP statusで認証、支払い、利用上限、上流エラーを区別し、再試行しない", async () => {
     const cases = [
-        { status: 401, type: "authentication_error", expected: "unauthorized" },
-        { status: 403, type: "forbidden", expected: "unauthorized" },
-        { status: 402, type: "invalid_request_error", expected: "payment_required" },
-        { status: 429, type: "rate_limit_exceeded", expected: "rate_limited" },
+        { status: 401, expected: "unauthorized" },
+        { status: 403, expected: "unauthorized" },
+        { status: 402, expected: "payment_required" },
+        { status: 422, expected: "upstream_error" },
+        { status: 429, expected: "rate_limited" },
+        { status: 529, expected: "upstream_error" },
     ];
 
     for (const fixture of cases) {
@@ -128,7 +149,7 @@ test("認証、残高、利用上限を区別し、429でも再試行しない",
                 apiKey: "test-secret",
                 fetchImpl: async () => {
                     upstreamCalls += 1;
-                    return gatewayError(fixture.status, fixture.type);
+                    return upstreamError(fixture.status);
                 },
             }),
             (error) => error instanceof JevRequestError && error.code === fixture.expected,

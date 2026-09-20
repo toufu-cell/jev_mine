@@ -186,15 +186,15 @@ export function validateBoardDto(payload) {
 
 function publicErrorForJev(error) {
     const messages = {
-        unauthorized: [502, "Vercel AI Gatewayの認証に失敗しました。AI_GATEWAY_API_KEYを確認してください。", "jev_unauthorized"],
-        payment_required: [402, "Vercel AI Gatewayの残高が不足しています。", "jev_payment_required"],
-        rate_limited: [503, "Vercel AI Gatewayの利用上限に達しました。時間を置いて再試行してください。", "jev_rate_limited"],
+        unauthorized: [502, "TypeSafeの認証に失敗しました。TYPESAFE_API_KEYを確認してください。", "jev_unauthorized"],
+        payment_required: [402, "TypeSafeの支払いを確認してください。", "jev_payment_required"],
+        rate_limited: [503, "TypeSafeの利用上限に達しました。時間を置いて再試行してください。", "jev_rate_limited"],
         timeout: [504, "Jevの応答が時間内に届きませんでした。再試行してください。", "jev_timeout"],
         malformed_response: [502, "Jevの応答形式を確認できませんでした。", "jev_malformed_response"],
         no_candidates: [409, "開けられる候補がありません。", "no_candidates"],
         client_cancelled: [499, "推論を停止しました。", "client_cancelled"],
-        network_error: [502, "Vercel AI Gatewayへ接続できませんでした。", "jev_network_error"],
-        upstream_error: [502, "Vercel AI Gatewayがリクエストを処理できませんでした。", "jev_upstream_error"],
+        network_error: [502, "TypeSafeへ接続できませんでした。", "jev_network_error"],
+        upstream_error: [502, "TypeSafeがリクエストを処理できませんでした。", "jev_upstream_error"],
     };
     return messages[error.code] ?? messages.upstream_error;
 }
@@ -214,7 +214,7 @@ async function serveAsset(response, asset, method) {
 }
 
 export function createApp({
-    apiKey = process.env.AI_GATEWAY_API_KEY ?? "",
+    apiKey = process.env.TYPESAFE_API_KEY ?? "",
     fetchImpl = globalThis.fetch,
     upstreamTimeoutMs = 15_000,
 } = {}) {
@@ -246,7 +246,7 @@ export function createApp({
                 if (apiKey.trim().length === 0) {
                     throw new HttpError(
                         503,
-                        "AI_GATEWAY_API_KEYを設定するとJev操作を利用できます。",
+                        "TYPESAFE_API_KEYを設定するとJev操作を利用できます。",
                         "jev_not_configured",
                     );
                 }

@@ -5,9 +5,9 @@ Jevが公開済みの盤面を評価し、推定地雷確率が最も低いマ�
 ## 必要な環境
 
 - Node.js 24以降
-- Jev操作を使う場合はVercel AI GatewayのAPIキー
+- Jev操作を使う場合はTypeSafeのAPIキー
 
-Jevモデルはクレジット購入なしで試せます。ただし、Vercel AI Gatewayの利用条件と利用上限が適用されます。
+TypeSafeのAPIキーは、待機リスト通過後に取得できます。利用条件と利用上限はTypeSafeの案内を確認してください。
 
 ## 起動
 
@@ -31,10 +31,10 @@ npm run dev
 
 ## APIキーの設定
 
-[Vercel AI Gatewayの認証手順](https://vercel.com/docs/ai-gateway/authentication-and-byok/api-keys)に従ってAPIキーを取得し、`.env`へ設定します。
+[TypeSafeのQuick start](https://docs.typesafe.ai/introduction/quickstart)に従ってAPIキーを取得し、`.env`へ設定します。
 
 ```dotenv
-AI_GATEWAY_API_KEY=取得したAPIキー
+TYPESAFE_API_KEY=取得したAPIキー
 ```
 
 `.env`はGitの追跡対象外です。APIキーはサーバーだけが読み取り、ブラウザへ配信するHTML、JavaScript、API応答には含めません。キーがない場合も手動操作は利用できますが、Jev操作は無効になります。
@@ -51,11 +51,11 @@ AI_GATEWAY_API_KEY=取得したAPIキー
 
 サーバーは、盤面サイズ、地雷総数、公開マスの座標と数字、未開封マス、旗をJevへ送ります。地雷位置や未公開マスの数字は送りません。旗は確定情報ではなく、利用者の仮説として説明します。
 
-各未開封候補について、boolean評価で「その座標に地雷があるか」を独立して評価します。全候補の`probability`を検証し、推定地雷確率が最も低いマスを開きます。同率の場合は上の行、同じ行では左の列を優先します。質問キーは推論入力にならないため、対象座標を各質問の指示にも含めます。
+各未開封候補について、noul評価で「その座標に地雷があるか」を独立して評価します。全候補の`noul`を検証し、推定地雷確率が最も低いマスを開きます。同率の場合は上の行、同じ行では左の列を優先します。質問キーは推論入力にならないため、対象座標を各質問の指示にも含めます。
 
 このアプリはJevの推定値を使い、別の論理ソルバーは搭載していません。推定値は安全を保証せず、通常のゲームでは地雷を開いて敗北する場合があります。思考文は生成しません。画面にも表示しません。
 
-Jevとの通信にはAI SDK 7の`experimental_evaluate`と`@ai-sdk/gateway`を使います。接続先は固定の`https://ai-gateway.vercel.sh/v4/ai/evaluation-model`、モデルは`typesafe-ai/jev`です。モデルIDは`ai-model-id`ヘッダーへ設定し、認証には`AI_GATEWAY_API_KEY`を使います。評価APIの仕様は、[Evaluation](https://vercel.com/docs/ai-gateway/modalities/evaluation)を参照してください。
+Jevとの通信にはNode.js標準の`fetch`を使います。接続先は固定の`https://api.typesafe.ai/v1/systemone`、モデルは`jev-latest`です。`TYPESAFE_API_KEY`をBearer認証に使います。評価APIの仕様は、[TypeSafe API reference](https://docs.typesafe.ai/api)を参照してください。
 
 ## テスト
 
@@ -63,4 +63,4 @@ Jevとの通信にはAI SDK 7の`experimental_evaluate`と`@ai-sdk/gateway`を�
 npm test
 ```
 
-テストはNode.js標準の`node:test`と`assert`を使います。ゲームの初手安全、展開、勝敗、公開盤面の送信制限、Jev応答の検証、HTTP入力制約、停止後の古い応答の破棄を確認します。AI SDKは実物を使い、外部HTTP通信だけを偽の`fetch`に置き換えます。そのため、実際のAPI利用や勝率は検証しません。
+テストはNode.js標準の`node:test`と`assert`を使います。ゲームの初手安全、展開、勝敗、公開盤面の送信制限、Jev応答の検証、HTTP入力制約、停止後の古い応答の破棄を確認します。外部HTTP通信だけを偽の`fetch`に置き換えるため、実際のAPI利用や勝率は検証しません。

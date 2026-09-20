@@ -414,7 +414,7 @@ async function loadConfig() {
         elements.configMessage.classList.toggle("error", !jevAvailable);
         elements.configMessage.textContent = jevAvailable
             ? "Jevを利用できます。旗は仮説として推論へ渡します。"
-            : ".envにAI_GATEWAY_API_KEYを設定するとJev操作を利用できます。手動操作は利用できます。";
+            : ".envにTYPESAFE_API_KEYを設定するとJev操作を利用できます。手動操作は利用できます。";
     } catch {
         jevAvailable = false;
         elements.configMessage.classList.add("error");
